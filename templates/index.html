@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+      iframe {
+          border: 0;
+      }
+      #loginWindow {
+          overflow: hidden;
+      }
+  </style>
+</head>
+<body>
+<meta charset="utf-8"/>
+<iframe id=embedSpotify style="overflow: hidden;" allowtransparency="true"
+        allow="encrypted-media"></iframe>
+
+<iframe id=loginWindow hidden allowtransparency="true" allow="encrypted-media"></iframe>
+
+<div hidden>
+  <div id="allButtons">
+    <input type="button" id="login" value="Login">
+    <input type="button" id="nextToken" value="Génère le nouveau token">
+    <input type="button" id="newSong" value="Actualise la chanson">
+  </div>
+  <div id="allValues" style="font-size: 10px;">
+    <p id="refreshtoken"></p>
+    <p id="actualtoken"></p>
+    <p id="actualsong"></p>
+  </div>
+</div>
+
+<script>
+    // VARIABLES
+    let noSong = "{{ noSongSVG }}"
+    let lastSongUrl = noSong;
+    let refreshToken = "{{ refresh_token }}";
+    let actualToken = "";
+    let serverURL = "http://localhost:{{ port }}"
+    document.getElementById("embedSpotify").src = lastSongUrl;
+
+
+    // Login to get your refresh Token
+    async function login() {
+        if (refreshToken !== "") {
+            actualToken = await getNextToken();
+            document.getElementById("refreshtoken").innerHTML = "refreshtoken: " + refreshToken;
+            document.getElementById("actualtoken").innerHTML = "actualtoken: " + actualToken;
+            mode("music");
+        } else {
+            console.log("Refresh token is empty, i'm logging in")
+            mode("login");
+            document.getElementById("loginWindow").src = serverURL + "/login";
+
+            let headers = new Headers();
+            headers.append("Content-Type", "application/json");
+            headers.append("Access-Control-Allow-Origin", "*");
+            headers.append("Accept", "application/json");
+
+            let url = serverURL + "/getToken";
+            const response = await fetch(url, {
+                mode: "cors",
+                method: "GET",
+                headers: headers,
+            });
+
+            if (response.ok) {
+                let tokens = await response.json();
+                refreshToken = tokens.refreshToken;
+                actualToken = tokens.accessToken;
+                document.getElementById("refreshtoken").innerHTML = "refreshtoken: " + refreshToken;
+                document.getElementById("actualtoken").innerHTML = "actualtoken: " + actualToken;
+                mode("music");
+                return tokens;
+            } else {
+                console.error(response);
+            }
+        }
+    }
+
+    // getNextToken
+    async function getNextToken() {
+        if (refreshToken === "")
+            return login();
+        let headers = new Headers();
+        headers.append("Content-Type", "application/json");
+        headers.append("Access-Control-Allow-Origin", "*");
+        headers.append("Accept", "application/json");
+        let url = serverURL + "/nextToken" + "?refresh_token=" + refreshToken;
+
+        const response = await fetch(url, {
+            mode: "cors",
+            method: "GET",
+            headers: headers,
+        });
+        if (response.ok) {
+            let token = await response.json();
+            actualToken = token.accessToken;
+            document.getElementById("actualtoken").innerHTML = "actualtoken: " + actualToken;
+            return actualToken;
+        } else {
+            console.error(response);
+        }
+    }
+
+
+    // musicUrl gives the url of the music played, given a token
+    async function getMusic(token) {
+        let headers = new Headers();
+        headers.append("Authorization", "Bearer " + token);
+        headers.append("Content-Type", "application/json");
+        headers.append("Accept", "application/json");
+        let url = "https://api.spotify.com/v1/me/player/currently-playing?market=FR";
+        const response = await fetch(url, {
+            mode: "cors",
+            method: "GET",
+            headers: headers,
+        })
+        if (response.status === 204) {
+            console.log("Aucune musique n'est jouée.");
+            return {noMusic: true};
+        } else if (response.status === 401) {
+            console.log("Plus de droits ! Il faut changer de Token.");
+            let nextToken = getNextToken();
+            return getMusic(nextToken);
+        } else if (response.ok) {
+            return await response.json();
+        } else {
+            console.error(response);
+        }
+    }
+
+    // music refreshes the embed link when called
+    async function music() {
+        if (actualToken === "") {
+            console.log("[music] No token !")
+            return login();
+        }
+        let data = await getMusic(actualToken);
+        if (data.hasOwnProperty("noMusic")) {
+            let embedUrl = noSong;
+            if (embedUrl !== lastSongUrl) {
+                lastSongUrl = embedUrl;
+                document.getElementById("embedSpotify").src = embedUrl;
+            }
+        } else {
+            if (data.hasOwnProperty("item")) {
+                document.getElementById("actualsong").innerHTML = data.item.artists[0].name + " - " + data.item.name;
+                console.log("Song is", data.item.name)
+                let embedUrl = data.item.external_urls.spotify.replace("/track/", "/embed/track/");
+                if (embedUrl !== lastSongUrl) {
+                    lastSongUrl = embedUrl;
+                    document.getElementById("embedSpotify").src = embedUrl;
+                }
+            } else {
+                console.log("No attribute item was found");
+            }
+        }
+    }
+
+    let lastMode = "music";
+
+    function mode(modeUsed) {
+        if (modeUsed === "login" && lastMode !== "login") {
+            lastMode = "login";
+            document.getElementById("embedSpotify").width = 0;
+            document.getElementById("embedSpotify").height = 0;
+        } else if (modeUsed === "music" && lastMode !== "music") {
+            lastMode = "music";
+            document.getElementById("embedSpotify").width = 485;
+            document.getElementById("embedSpotify").height = 80;
+        } else {
+            console.log("mode inconnu : ", modeUsed, lastMode);
+        }
+    }
+
+    function loopRefreshMusic() {
+        if (actualToken !== "") {
+            music();
+            setTimeout(loopRefreshMusic, 5000)
+        } else {
+            actualToken = getNextToken();
+            setTimeout(loopRefreshMusic, 10000)
+        }
+    }
+
+    document.getElementById("login").addEventListener("click", login);
+    document.getElementById("nextToken").addEventListener("click", getNextToken);
+    document.getElementById("newSong").addEventListener("click", music);
+
+    mode("login");
+    music();
+    loopRefreshMusic()
+</script>
+</body>
+</html>
