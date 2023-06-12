@@ -15,7 +15,7 @@ refresh_token = "xxxx"
 # https://gistcdn.githack.com/antoinepringalle/3a4aa2d4f0fc1c2a9a178e95e815f348/raw/40fc1230accf2108b82e8e65761112ae5dbf3b8e/no-music-spotify.svg
 no_song_svg = "static/svg/no-music-spotify.svg"
 port = 8000
-redirect_uri = f"http://localhost:{str(port)}/callback"
+redirect_uri = "http://localhost:{}/callback".format(str(port))
 code = ""
 
 
@@ -100,5 +100,5 @@ def home():
 
 
 if __name__ == "__main__":
-    print(f"Listening on port {str(port)}")
+    print("Listening on port {}".format(str(port)))
     serve(app, host="0.0.0.0", port=port)
