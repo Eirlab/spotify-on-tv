@@ -1,0 +1,13 @@
+[Unit]
+Description=Spotify on TV Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/spotify-on-tv
+ExecStart=/home/pi/spotify-on-tv/venv/bin/python3 /home/pi/spotify-on-tv/app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
